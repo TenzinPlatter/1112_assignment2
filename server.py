@@ -1,7 +1,7 @@
 import sys
 import socket
 from threading import Thread
-from logins import Logins, Login
+from logins import Logins
 
 class Client:
     def __init__(self, sock: socket.socket) -> None:
@@ -47,10 +47,7 @@ class Server:
     def __init__(self, host: str, port: int) -> None:
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.socket.bind((host, port))
-
-        # pass in max number of clients
         self.socket.listen()
-        print("Server waiting for connection...")
 
     def listen(self) -> None:
         """
@@ -67,15 +64,21 @@ class Server:
             # starts client in new thread
             Thread(target = self.handle_new_client, args = (client,)).start()
 
-    def broadcast(self, sender: str, msg: str):
+    def broadcast(self, client_names: list[str], msg: str, all_but: bool = True):
         """
         Broadcasts a message to all other members in server
+        If all_but is set to False, the message will be sent to the clients
+        passed in, else sent to all clients other than the ones passed in
         """
         for client in Server.clients:
-            if client.name() == sender:
+            if all_but and client.get_name() not in client_names:
+                client.socket.send(msg.encode())
                 continue
 
-            client.socket.send(msg.encode())
+            if not all_but and client.get_name() in client_names:
+                client.socket.send(msg.encode())
+                continue
+
 
     def handle_new_client(self, client: Client):
         """
@@ -87,11 +90,8 @@ class Server:
             if msg.startswith("LOGIN:"):
                 client.try_login(msg)
 
-
-
 def main(args: list[str]) -> None:
     Server("127.0.0.1",  8002).listen()
-
 
 if __name__ == "__main__":
     main(sys.argv[1:])
