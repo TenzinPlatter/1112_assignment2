@@ -17,7 +17,17 @@ class Client:
         
         self.socket.send(f"LOGIN:{username}:{password}".encode())
 
-        received = self.socket.recv(8192)
+        received = self.socket.recv(8192).decode()
+
+        code = int(received.split(":")[2])
+
+        match code:
+            case 0:
+                print(f"Welcome {username}")
+            case 1:
+                print(f"Error: User {username} not found")
+            case 2:
+                print(f"Error: Wrong password for user {username}")
 
     def talk_to_server(self) -> None:
         self.socket.send(self.name.encode())
@@ -38,7 +48,6 @@ class Client:
             msg = self.socket.recv(1024).decode()
             if not msg.strip():
                 os._exit(1)
-
 
 def main(args: list[str]) -> None:
     Client("127.0.0.1", 8002)
