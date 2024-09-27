@@ -3,6 +3,9 @@ class Login:
         self._name = name
         self._password = password
         self._logged_in = False
+
+    def __str__(self) -> str:
+        return f"Name: {self._name}, Password: {self._password}"
     
     def is_valid(self, name: str, password: str) -> bool:
         if self._name == name and self._password == password:
@@ -20,6 +23,12 @@ class Login:
 class Logins:
     def __init__(self) -> None:
         self.accounts = []
+
+    def __str__(self) -> str:
+        res = ""
+        for acc in self.accounts:
+            res += str(acc) + ", "
+        return res.rstrip(", ")
 
     def add_account(self, name: str, password: str) -> None:
         self.accounts.append(Login(name, password))

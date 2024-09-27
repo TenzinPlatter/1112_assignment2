@@ -14,6 +14,18 @@ class Config:
         self.parse_config(os.path.expanduser(config_path))
         self.parse_users()
 
+        port = self.get_port()
+
+        if not isinstance(port, int) or not (1024 <= port <= 65535):
+            sys.stderr.write(
+                    "Invalid port, expecting an integer in range 1024-65535\n"
+                             )
+            os._exit(0)
+
+
+    def get_port(self) -> int:
+        return int(self.config["port"])
+
     def parse_users(self) -> None:
         user_config = os.path.expanduser(self.config["userDatabase"])
         try:
