@@ -1,6 +1,9 @@
 # Scratchpad/Testing file
 test.py
 
+# Json files for testing
+json_files/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
