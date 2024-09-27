@@ -28,9 +28,6 @@ class Client:
             if not msg.strip():
                 os._exit(1)
 
-            print("\033[1;31;40m" + msg + "\033[0m")
-
-
 
 def main(args: list[str]) -> None:
     Client("127.0.0.1", 8002)
