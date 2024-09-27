@@ -11,6 +11,14 @@ class Client:
 
         self.talk_to_server()
 
+    def handle_login(self) -> None:
+        username = input("Enter username: ")
+        password = input("Enter password: ")
+        
+        self.socket.send(f"LOGIN:{username}:{password}".encode())
+
+        received = self.socket.recv(8192)
+
     def talk_to_server(self) -> None:
         self.socket.send(self.name.encode())
         Thread(target = self.receive_message).start()
@@ -19,8 +27,11 @@ class Client:
     def send_message(self) -> None:
         while True:
             data = input()
-            msg = f"{self.name}: {data}"
-            self.socket.send(msg.encode())
+            if data == "LOGIN":
+                self.handle_login()
+                return
+
+            self.socket.send(data.encode())
     
     def receive_message(self) -> None:
         while True:
