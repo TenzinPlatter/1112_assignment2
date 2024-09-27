@@ -53,7 +53,18 @@ class Client:
                 os._exit(1)
 
 def main(args: list[str]) -> None:
-    Client("127.0.0.1", 8002)
+    if len(args) != 2:
+        sys.stderr.write(
+                "Error: Expecting 2 arguments: <server address> <port>\n"
+                )
+        os._exit(1)
+
+    try:
+        Client(args[0], int(args[1]))
+    except ConnectionRefusedError:
+        sys.stderr.write(
+                f"Error: cannot connect to server at {args[0]} and {args[1]}.\n"
+                )
 
 
 if __name__ == "__main__":
