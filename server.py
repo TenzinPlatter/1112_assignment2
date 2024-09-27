@@ -2,6 +2,7 @@ import sys
 import socket
 from threading import Thread
 from logins import Logins
+from config import Config
 
 class Client:
     def __init__(self, sock: socket.socket) -> None:
@@ -44,7 +45,7 @@ class Server:
     clients = []
     rooms = []
 
-    def __init__(self, host: str, port: int) -> None:
+    def __init__(self, host: str, port: int, config: Config) -> None:
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.socket.bind((host, port))
         self.socket.listen()
@@ -91,7 +92,7 @@ class Server:
                 client.try_login(msg)
 
 def main(args: list[str]) -> None:
-    Server("127.0.0.1",  8002).listen()
+    Server("127.0.0.1",  8002, Config(args[0])).listen()
 
 if __name__ == "__main__":
     main(sys.argv[1:])

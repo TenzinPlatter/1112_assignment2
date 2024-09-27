@@ -15,6 +15,9 @@ class Client:
         username = input("Enter username: ")
         password = input("Enter password: ")
         
+        if not username or not password:
+            return
+
         self.socket.send(f"LOGIN:{username}:{password}".encode())
 
         received = self.socket.recv(8192).decode()

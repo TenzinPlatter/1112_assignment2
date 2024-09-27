@@ -18,20 +18,19 @@ class Login:
         return self._name
 
 class Logins:
-    _accounts = []
+    def __init__(self) -> None:
+        self.accounts = []
 
-    @staticmethod
-    def add_account(name: str, password: str) -> None:
-        Logins._accounts.append(Login(name, password))
+    def add_account(self, name: str, password: str) -> None:
+        self.accounts.append(Login(name, password))
 
-    """
-    Returns a Login obj for a successful login, or 
-    1 -> Username Not found
-    2 -> Only Username matches
-    """
-    @staticmethod
-    def try_login(name: str, password: str) -> Login | int:
-        for account in Logins._accounts:
+    def try_login(self, name: str, password: str) -> Login | int:
+        """
+        Returns a Login obj for a successful login, or 
+        1 -> Username Not found
+        2 -> Only Username matches
+        """
+        for account in self.accounts:
             if account.valid_details(name, password):
                 return account
 
