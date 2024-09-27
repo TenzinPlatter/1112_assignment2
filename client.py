@@ -7,7 +7,6 @@ class Client:
     def __init__(self, host: str, port: int) -> None:
         self.socket = socket.socket()
         self.socket.connect((host, port))
-        self.name = input("Enter your name: ")
 
         self.talk_to_server()
 
@@ -37,18 +36,19 @@ class Client:
                 print(f"Error: Wrong password for user {username}")
 
     def talk_to_server(self) -> None:
-        self.socket.send(self.name.encode())
         Thread(target = self.receive_message).start()
         self.send_message()
 
     def send_message(self) -> None:
         while True:
-            data = input()
+            data = input("> ")
             if data == "LOGIN":
                 self.handle_login()
                 return
 
-            self.socket.send(data.encode())
+            if data == "exit":
+                self.socket.send("QUIT".encode())
+
     
     def receive_message(self) -> None:
         while True:

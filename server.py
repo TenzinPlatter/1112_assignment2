@@ -10,6 +10,13 @@ class Client:
         self.socket = sock
         self.account = None
 
+    def close(self):
+        if self.account:
+            self.account.logout()
+
+        self.socket.close()
+
+
     def get_name(self) -> str | None:
         """
         Returns None if user is not logged in, else returns username
@@ -32,7 +39,7 @@ class Client:
             self.socket.send("LOGIN:ACKSTATUS:3".encode())
             return
 
-        account = globals.logins.try_login(data[0], data[1])
+        account = globals.logins.try_login(data[1], data[2])
 
         if isinstance(account, int):
             self.socket.send(f"LOGIN:ACKSTATUS:{account}".encode())
@@ -41,6 +48,7 @@ class Client:
         self.account = account
         # indicates successful login
         self.socket.send("LOGIN:ACKSTATUS:0".encode())
+
 
 class Server:
     clients = []
@@ -54,6 +62,7 @@ class Server:
         print(
               f"Server started on ip {host}, port {port}, awaiting connection..."
               )
+        print(globals.logins)
 
     def listen(self) -> None:
         """
@@ -95,6 +104,16 @@ class Server:
 
             if msg.startswith("LOGIN:"):
                 client.try_login(msg)
+
+            if msg == "QUIT":
+                self.close()
+
+    def close(self):
+        for client in self.clients:
+            client.close()
+
+        self.socket.close()
+        os._exit(0)
 
 def main(args: list[str]) -> None:
     if len(args) != 1:

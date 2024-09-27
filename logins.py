@@ -5,7 +5,7 @@ class Login:
         self._logged_in = False
 
     def __str__(self) -> str:
-        return f"Name: {self._name}, Password: {self._password}"
+        return f"Name: '{self._name}', Password: '{self._password}'"
     
     def is_valid(self, name: str, password: str) -> bool:
         if self._name == name and self._password == password:
@@ -40,7 +40,7 @@ class Logins:
         2 -> Only Username matches
         """
         for account in self.accounts:
-            if account.valid_details(name, password):
+            if account.is_valid(name, password):
                 return account
 
             if account.get_name() == name:
