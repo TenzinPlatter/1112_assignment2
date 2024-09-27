@@ -15,8 +15,12 @@ class Client:
         username = input("Enter username: ")
         password = input("Enter password: ")
         
-        if not username or not password:
+        if not username:
+            sys.stderr.write("Username cannot be empty.\n")
             return
+
+        if not password:
+            sys.stderr.write("Password cannot be empty.\n")
 
         self.socket.send(f"LOGIN:{username}:{password}".encode())
 
