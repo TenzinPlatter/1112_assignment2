@@ -10,16 +10,13 @@ class Client:
 
         self.talk_to_server()
 
-    def handle_login(self) -> None:
-        username = input("Enter username: ")
-        password = input("Enter password: ")
-        
-        if not username:
-            sys.stderr.write("Username cannot be empty.\n")
+    def login(self) -> None:
+        info = self.get_info()
+
+        if not info:
             return
 
-        if not password:
-            sys.stderr.write("Password cannot be empty.\n")
+        username, password = info
 
         self.socket.send(f"LOGIN:{username}:{password}".encode())
 
@@ -42,12 +39,42 @@ class Client:
     def send_message(self) -> None:
         while True:
             data = input("> ")
-            if data == "LOGIN":
-                self.handle_login()
-                return
 
-            if data == "exit":
-                self.socket.send("QUIT".encode())
+            match data:
+                case "LOGIN":
+                    self.login()
+
+                case "REGISTER":
+                    self.register()
+
+                # delete for submission
+                case "exit":
+                    self.socket.send("QUIT".encode())
+                    os._exit(0)
+
+    def register(self) -> None:
+        info = self.get_info()
+
+        if not info:
+            return
+
+        username, password = info
+
+        self.socket.send(f"REGISTER:{username}:{password}".encode())
+
+    def get_info(self) -> tuple[str, str] | None:
+        username = input("Enter username: ")
+        password = input("Enter password: ")
+        
+        if not username:
+            sys.stderr.write("Username cannot be empty.\n")
+            return None
+
+        if not password:
+            sys.stderr.write("Password cannot be empty.\n")
+            return None
+
+        return (username, password)
 
     
     def receive_message(self) -> None:
@@ -57,11 +84,19 @@ class Client:
                 os._exit(1)
 
 def main(args: list[str]) -> None:
-    if len(args) != 2:
-        sys.stderr.write(
-                "Error: Expecting 2 arguments: <server address> <port>\n"
-                )
-        os._exit(1)
+
+    # TODO: put this back in for submission
+    # if len(args) != 2:
+    #     sys.stderr.write(
+    #             "Error: Expecting 2 arguments: <server address> <port>\n"
+    #             )
+    #     os._exit(1)
+
+    if len(args) < 1 or not args[0]:
+        args.append("127.0.0.1")
+
+    if len(args) < 2 or not args[1]:
+        args.append("8002")
 
     try:
         Client(args[0], int(args[1]))

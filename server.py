@@ -1,6 +1,8 @@
 import sys
+import time
 import socket
 import os
+import bcrypt
 from threading import Thread
 from config import Config
 import globals
@@ -26,7 +28,6 @@ class Client:
 
         return self.account.get_name();
 
-
     def try_login(self, user_input: str) -> None:
         """
         Scans data sent by connection until LOGIN message is sent with valid login
@@ -48,6 +49,17 @@ class Client:
         self.account = account
         # indicates successful login
         self.socket.send("LOGIN:ACKSTATUS:0".encode())
+
+    def try_register(self, data: str) -> None:
+        if len(data.split(":")) != 3:
+            self.socket.send("REGISTER:ACKSTATUS:2".encode())
+
+        username, password = data.split(":")[1:]
+
+        if globals.logins.account_exists(username):
+            self.socket.send("REGISTER:ACKSTATUS:1".encode())
+
+        hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt())
 
 
 class Server:
@@ -94,7 +106,6 @@ class Server:
                 client.socket.send(msg.encode())
                 continue
 
-
     def handle_new_client(self, client: Client):
         """
         Function to handle client on a thread
@@ -105,12 +116,18 @@ class Server:
             if msg.startswith("LOGIN:"):
                 client.try_login(msg)
 
+            if msg.startswith("REGISTER:"):
+                client.try_register(msg)
+
             if msg == "QUIT":
                 self.close()
 
+    # TODO: remove for submission
     def close(self):
         for client in self.clients:
             client.close()
+
+        time.sleep(1)
 
         self.socket.close()
         os._exit(0)

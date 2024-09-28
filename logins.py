@@ -33,6 +33,12 @@ class Logins:
     def add_account(self, name: str, password: str) -> None:
         self.accounts.append(Login(name, password))
 
+    def account_exists(self, name: str) -> bool:
+        """
+        returns wether or not a username has an associated account
+        """
+        return name in self.accounts
+
     def try_login(self, name: str, password: str) -> Login | int:
         """
         Returns a Login obj for a successful login, or 
@@ -43,8 +49,8 @@ class Logins:
             if account.is_valid(name, password):
                 return account
 
-            if account.get_name() == name:
-                return 2
+        if self.account_exists(name):
+            return 2
         
         return 1
 
