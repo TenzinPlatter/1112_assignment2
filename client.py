@@ -22,6 +22,8 @@ class Client:
 
         received = self.socket.recv(8192).decode()
 
+        print("received")
+
         code = int(received.split(":")[2])
 
         match code:

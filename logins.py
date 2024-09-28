@@ -1,3 +1,5 @@
+import bcrypt
+
 class Login:
     def __init__(self, name: str, password: str) -> None:
         self._name = name
@@ -8,7 +10,10 @@ class Login:
         return f"Name: '{self._name}', Password: '{self._password}'"
     
     def is_valid(self, name: str, password: str) -> bool:
-        if self._name == name and self._password == password:
+        if (
+                self._name == name
+                and bcrypt.checkpw(password.encode(), self._password.encode())
+                ):
             self._logged_in = True
             return True
 

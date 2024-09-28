@@ -4,6 +4,9 @@ test*
 # Json files for testing
 json_files/
 
+# Venv
+env/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
