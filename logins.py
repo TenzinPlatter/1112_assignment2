@@ -12,7 +12,7 @@ class Login:
     def is_valid(self, name: str, password: str) -> bool:
         if (
                 self._name == name
-                and bcrypt.checkpw(password.encode(), self._password)
+                and bcrypt.checkpw(password.encode(), self._password.encode())
                 ):
             self._logged_in = True
             return True

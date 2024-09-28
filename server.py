@@ -41,6 +41,7 @@ class Client:
 
         account = globals.logins.try_login(data[1], data[2])
 
+
         if isinstance(account, int):
             self.socket.send(f"LOGIN:ACKSTATUS:{account}".encode())
             return
