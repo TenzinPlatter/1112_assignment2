@@ -1,9 +1,7 @@
 import sys
 import os
 import socket
-from threading import Thread
-
-class Client:
+from threading import Thread class Client:
     def __init__(self, host: str, port: int) -> None:
         self.socket = socket.socket()
         self.socket.connect((host, port))
@@ -40,9 +38,7 @@ class Client:
 
     def send_message(self) -> None:
         while True:
-            data = input("> ")
-
-            match data:
+            data = input("> ") match data:
                 case "LOGIN":
                     self.login()
 
@@ -87,18 +83,11 @@ class Client:
 
 def main(args: list[str]) -> None:
 
-    # TODO: put this back in for submission
-    # if len(args) != 2:
-    #     sys.stderr.write(
-    #             "Error: Expecting 2 arguments: <server address> <port>\n"
-    #             )
-    #     os._exit(1)
-
-    if len(args) < 1 or not args[0]:
-        args.append("127.0.0.1")
-
-    if len(args) < 2 or not args[1]:
-        args.append("8002")
+    if len(args) != 2:
+        sys.stderr.write(
+                "Error: Expecting 2 arguments: <server address> <port>\n"
+                )
+        os._exit(1)
 
     try:
         Client(args[0], int(args[1]))
