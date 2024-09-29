@@ -22,6 +22,8 @@ class Config:
                              )
             os._exit(0)
 
+    def get_userdatabase_path(self) -> str:
+        return os.path.expanduser(self.config["userDatabase"])
 
     def get_port(self) -> int:
         return int(self.config["port"])

@@ -3,6 +3,7 @@ import time
 import socket
 import os
 import bcrypt
+import json
 from threading import Thread
 from config import Config
 import globals
@@ -16,6 +17,7 @@ class Client:
         if self.account:
             self.account.logout()
 
+        self.account = None
         self.socket.close()
 
 
@@ -59,23 +61,26 @@ class Client:
 
         if globals.logins.account_exists(username):
             self.socket.send("REGISTER:ACKSTATUS:1".encode())
+            return
 
-        hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt())
-
+        Server.register_account(username, password)
+        self.socket.send("REGISTER:ACKSTATUS:0".encode())
 
 class Server:
     clients = []
     rooms = []
 
-    def __init__(self, host: str, port: int) -> None:
+    def __init__(self, config: Config) -> None:
+        Server.config = config
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+        host, port = "127.0.0.1", config.get_port()
         self.socket.bind((host, port))
         self.socket.listen()
 
         print(
               f"Server started on ip {host}, port {port}, awaiting connection..."
               )
-        print(globals.logins)
 
     def listen(self) -> None:
         """
@@ -94,9 +99,7 @@ class Server:
 
     def broadcast(self, client_names: list[str], msg: str, all_but: bool = True):
         """
-        Broadcasts a message to all other members in server
-        If all_but is set to False, the message will be sent to the clients
-        passed in, else sent to all clients other than the ones passed in
+        Broadcasts a message to all other members in server If all_but is set to False, the message will be sent to the clients passed in, else sent to all clients other than the ones passed in
         """
         for client in Server.clients:
             if all_but and client.get_name() not in client_names:
@@ -123,6 +126,25 @@ class Server:
             if msg == "QUIT":
                 self.close()
 
+
+    @staticmethod
+    def register_account(name: str, password: str) -> None:
+        hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt())
+
+        new_account = {
+                "username" : name,
+                "password" : hash.decode()
+                }
+
+        with open(Server.config.get_userdatabase_path(), "r") as f:
+            accounts = json.load(f)
+
+        accounts.append(new_account)
+        globals.logins.add_account(name, hash.decode())
+
+        with open(Server.config.get_userdatabase_path(), "w") as f:
+            json.dump(accounts, f, indent = 4)
+
     # TODO: remove for submission
     def close(self):
         for client in self.clients:
@@ -141,7 +163,7 @@ def main(args: list[str]) -> None:
     # sets all users and checks for config errors
     config = Config(args[0])
 
-    Server("127.0.0.1",  config.get_port()).listen()
+    Server(config).listen()
 
 if __name__ == "__main__":
     main(sys.argv[1:])

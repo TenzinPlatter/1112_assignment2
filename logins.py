@@ -36,13 +36,20 @@ class Logins:
         return res.rstrip(", ")
 
     def add_account(self, name: str, password: str) -> None:
+        """
+        takes password as str hash
+        """
         self.accounts.append(Login(name, password))
 
     def account_exists(self, name: str) -> bool:
         """
         returns wether or not a username has an associated account
         """
-        return name in self.accounts
+        for account in self.accounts:
+            if account.get_name() == name:
+                return True
+
+        return False
 
     def try_login(self, name: str, password: str) -> Login | int:
         """
@@ -58,4 +65,3 @@ class Logins:
             return 2
         
         return 1
-
