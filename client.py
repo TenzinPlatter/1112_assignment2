@@ -31,10 +31,22 @@ class Client:
             case 2:
                 print(f"Error: Wrong password for user {username}")
 
-    def talk_to_server(self) -> None:
-        self.send_message()
+    def roomlist(self) -> None:
+        mode = input("Would you like to join as a player or viewer? [PLAYER/VIEWER]")
 
-    def send_message(self) -> None:
+        self.socket.send(f"ROOMLIST:{mode}".encode())
+
+        response = self.socket.recv(8192).decode()
+
+        if response == "ROOMLIST:ACKSTATUS:1":
+            sys.stderr.write("ClientError: Please input a valid mode")
+            return
+        
+        roomlist = response.split(":")[-1]
+
+        print(f"Room available to join as {mode}: {roomlist}")
+
+    def talk_to_server(self) -> None:
         while True:
             data = input("> ")
             match data:
@@ -43,6 +55,9 @@ class Client:
 
                 case "REGISTER":
                     self.register()
+
+                case "ROOMLIST":
+                    self.roomlist()
 
                 # delete for submission
                 case "exit":

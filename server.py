@@ -20,7 +20,6 @@ class Client:
         self.account = None
         self.socket.close()
 
-
     def get_name(self) -> str | None:
         """
         Returns None if user is not logged in, else returns username
@@ -65,6 +64,18 @@ class Client:
 
         Server.register_account(username, password)
         self.socket.send("REGISTER:ACKSTATUS:0".encode())
+
+    def roomlist(self, data: str) -> None:
+        if (
+                len(data.split(":")) != 2
+                or data.split(":")[1] not in ["PLAYER", "VIEWER"]
+                ):
+            self.socket.send("ROOMLIST:ACKSTATUS:1".encode())
+            return
+        
+        roomlist = ",".join(globals.rooms.get_room_names())        
+
+        self.socket.send(f"ROOMLIST:ACKSTATUS:0:{roomlist}".encode())
 
 class Server:
     clients = []
@@ -117,15 +128,19 @@ class Server:
         while True:
             msg = client.socket.recv(8192).decode()
 
-            if msg.startswith("LOGIN:"):
-                client.try_login(msg)
+            match msg:
+                case s if s.startswith("LOGIN:"):
+                    client.try_login(msg)
 
-            if msg.startswith("REGISTER:"):
-                client.try_register(msg)
+                case s if s.startswith("REGISTER:"):
+                    client.try_register(msg)
 
-            if msg == "QUIT":
-                self.close()
+                case s if s.startswith("ROOMLIST:"):
+                    client.roomlist(msg)
 
+
+                case "QUIT":
+                    self.close()
 
     @staticmethod
     def register_account(name: str, password: str) -> None:
