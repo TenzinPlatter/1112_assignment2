@@ -4,6 +4,7 @@ import socket
 import os
 import bcrypt
 import json
+import struct
 from threading import Thread
 from config import Config
 import globals
@@ -94,6 +95,9 @@ class Server:
     def __init__(self, config: Config) -> None:
         Server.config = config
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        # maybe remove for submission, not sure if struct is allowed
+        self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("ii", 1, 0))
 
         host, port = "127.0.0.1", config.get_port()
         self.socket.bind((host, port))
