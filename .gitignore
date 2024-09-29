@@ -1,5 +1,5 @@
-# init script
-setup.zsh
+# dev scripts
+*.zsh
 
 # Scratchpad/Testing files
 test*
