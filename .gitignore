@@ -2,7 +2,7 @@
 scripts/
 
 # Scratchpad/Testing files
-test*
+scratch/
 
 # Json files for testing
 json_files/
