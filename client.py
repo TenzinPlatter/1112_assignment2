@@ -33,8 +33,13 @@ class Client:
             case 2:
                 print(f"Error: Wrong password for user {username}")
 
+    def received_badauth(self) -> None:
+        print("Error: You must be logged in to perform this action")
+
     def roomlist(self) -> None:
-        mode = input("Would you like to join as a player or viewer? [PLAYER/VIEWER]")
+        mode = input(
+                "Would you like to join as a player or viewer? [PLAYER/VIEWER] "
+                )
 
         self.socket.send(f"ROOMLIST:{mode}".encode())
 
@@ -42,6 +47,10 @@ class Client:
 
         if response == "ROOMLIST:ACKSTATUS:1":
             sys.stderr.write("ClientError: Please input a valid mode")
+            return
+
+        if response == "BADAUTH":
+            self.received_badauth()
             return
         
         roomlist = response.split(":")[-1]
@@ -104,7 +113,6 @@ class Client:
         return (username, password)
 
 def main(args: list[str]) -> None:
-
     if len(args) != 2:
         sys.stderr.write(
                 "Error: Expecting 2 arguments: <server address> <port>\n"
