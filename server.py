@@ -20,6 +20,9 @@ class Client:
         self.account = None
         self.socket.close()
 
+    def has_auth(self) -> bool:
+        return self.account is not None
+
     def get_name(self) -> str | None:
         """
         Returns None if user is not logged in, else returns username
@@ -72,10 +75,17 @@ class Client:
                 ):
             self.socket.send("ROOMLIST:ACKSTATUS:1".encode())
             return
+
+        if not self.has_auth():
+            self.send_badauth()
+            return
         
         roomlist = ",".join(globals.rooms.get_room_names())        
 
         self.socket.send(f"ROOMLIST:ACKSTATUS:0:{roomlist}".encode())
+
+    def send_badauth(self):
+        self.socket.send("BADAUTH".encode())
 
 class Server:
     clients = []

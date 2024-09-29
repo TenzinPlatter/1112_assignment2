@@ -1,7 +1,7 @@
 import sys
 import os
 import socket
-from threading import Thread
+
 class Client:
     def __init__(self, host: str, port: int) -> None:
         self.socket = socket.socket()
@@ -24,6 +24,8 @@ class Client:
         code = int(received.split(":")[2])
 
         match code:
+            case -1:
+                print(f"Error: User {username} already logged in")
             case 0:
                 print(f"Welcome {username}")
             case 1:
