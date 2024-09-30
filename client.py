@@ -57,6 +57,27 @@ class Client:
 
         print(f"Room available to join as {mode}: {roomlist}")
 
+    def create_room(self) -> None:
+        room_name = input("Please enter a name for your room: ")
+        self.socket.send(f"CREATE:{room_name}".encode())
+
+        response = self.socket.recv(8192).decode()
+        
+        if not response[:-1] == "CREATE:ACKSTATUS:":
+            raise Exception(f"Invalid response: {response}")
+
+        code = int(response[-1])
+
+        match code:
+            case 0:
+                print(f"Successfully created room {room_name}")
+            case 1:
+                print(f"Error Room {room_name} is invalid")
+            case 2:
+                print(f"Error: Room {room_name} already exists")
+            case 3:
+                print("Error: Server already contains a maxumum of 256 rooms")
+
     def talk_to_server(self) -> None:
         while True:
             data = input("> ")
@@ -69,6 +90,12 @@ class Client:
 
                 case "ROOMLIST":
                     self.roomlist()
+
+                case "CREATE":
+                    self.create_room()
+
+                case "JOIN":
+                    self.join_room()
 
                 # delete for submission
                 case "exit":

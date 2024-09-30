@@ -8,6 +8,7 @@ import struct
 from threading import Thread
 from config import Config
 import globals
+import room
 
 class Client:
     def __init__(self, sock: socket.socket) -> None:
@@ -72,25 +73,54 @@ class Client:
     def roomlist(self, data: str) -> None:
         if (
                 len(data.split(":")) != 2
-                or data.split(":")[1] not in ["PLAYER", "VIEWER"]
+                or (mode := data.split(":")[1]) not in ["PLAYER", "VIEWER"]
                 ):
             self.socket.send("ROOMLIST:ACKSTATUS:1".encode())
             return
-
-        if not self.has_auth():
-            self.send_badauth()
-            return
         
-        roomlist = ",".join(globals.rooms.get_room_names())        
+        roomlist = ",".join(globals.rooms.get_room_names(mode == "PLAYER"))        
 
         self.socket.send(f"ROOMLIST:ACKSTATUS:0:{roomlist}".encode())
 
-    def send_badauth(self):
-        self.socket.send("BADAUTH".encode())
+    def check_for_badauth(self) -> bool:
+        if not self.has_auth():
+            self.socket.send("BADAUTH".encode())
+            return True
+        return False
+    
+    def create_room(self, data: str):
+        #TODO: need someway to check if this is a ':' in the name of room vs
+        # a separator
+        if len(data.split(":")) != 2:
+            self.socket.send("CREATE:ACKSTATUS:4".encode())
+            return
+
+        room_name = data.split(":")[1]
+
+        if (
+                not room_name
+                .replace("-", "")
+                .replace(" ", "")
+                .replace("_", "")
+                .isalnum()
+                or len(room_name) > 20
+                ):
+            self.socket.send("CREATE:ACKSTATUS:1".encode())
+            return
+        
+        if globals.rooms.room_exists(room_name):
+            self.socket.send("CREATE:ACKSTATUS:2".encode())
+            return
+
+        if globals.rooms.is_full():
+            self.socket.send("CREATE:ACKSTATUS:3".encode())
+            return
+        
+        globals.rooms.create(room_name)
+        self.socket.send("CREATE:ACKSTATUS:4".encode())
 
 class Server:
     clients = []
-    rooms = []
 
     def __init__(self, config: Config) -> None:
         Server.config = config
@@ -142,16 +172,25 @@ class Server:
         while True:
             msg = client.socket.recv(8192).decode()
 
+            cmd = msg.split(":")[0]
+
+            # commands requiring authorisation
+            if cmd in ["ROOMLIST", "CREATE"]:
+                if client.check_for_badauth():
+                    return
+
             match msg:
-                case s if s.startswith("LOGIN:"):
+                case "LOGIN":
                     client.try_login(msg)
 
-                case s if s.startswith("REGISTER:"):
+                case "REGISTER":
                     client.try_register(msg)
 
-                case s if s.startswith("ROOMLIST:"):
+                case "ROOMLIST":
                     client.roomlist(msg)
 
+                case "CREATE":
+                    client.create_room(msg)
 
                 case "QUIT":
                     self.close()
