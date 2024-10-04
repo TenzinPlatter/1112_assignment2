@@ -92,6 +92,20 @@ def print_board(board: Board):
         print(COLUMN_SEPARATOR)
         print(ROW_SEPARATOR * N_ROW_SEPARATORS)
 
+def print_board_from_status(status: str) -> None:
+    board = []
+    for y in range(3):
+        row = []
+        for x in range(3):
+            pos = y * 3 + x
+            if status[pos] == "0":
+                row.append(EMPTY)
+            elif status[pos] == "1":
+                row.append(CROSS)
+            elif status[pos] == "2":
+                row.append(NOUGHT)
+        board.append(row)
+    print_board(board)
 
 def player_turn(player: str, board: Board) -> tuple[int, int]:
     """Does a player's turn and returns the position of the turn"""

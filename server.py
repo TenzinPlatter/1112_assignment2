@@ -6,12 +6,23 @@ import bcrypt
 import json
 from threading import Thread
 from config import Config
+from room import Room
 import globals
 
 class Client:
     def __init__(self, sock: socket.socket) -> None:
         self.socket = sock
         self.account = None
+
+    @property
+    def name(self) -> str | None:
+        """
+        Returns None if user is not logged in, else returns username
+        """
+        if not self.account:
+            return None
+
+        return self.account.name
 
     def close(self):
         if self.account:
@@ -22,15 +33,6 @@ class Client:
 
     def has_auth(self) -> bool:
         return self.account is not None
-
-    def get_name(self) -> str | None:
-        """
-        Returns None if user is not logged in, else returns username
-        """
-        if not self.account:
-            return None
-
-        return self.account.get_name();
 
     def try_login(self, args: list[str]) -> None:
         """
@@ -131,10 +133,11 @@ class Client:
             self.socket.send("JOIN:ACKSTATUS:1".encode())
             return
 
-        if globals.rooms.game_is_full(room_name):
+        if mode == "PLAYER" and globals.rooms.game_is_full(room_name):
             self.socket.send("JOIN:ACKSTATUS:2".encode())
             return
 
+        # mostly so lsp stops yelling
         if self.account is None:
             raise Exception(
                     "How has this happened - should've been caught by badauth"
@@ -142,11 +145,26 @@ class Client:
 
         globals.rooms.join(room_name, self.account.name, mode == "PLAYER")
 
+        room = globals.rooms.get_room(room_name)
+
+        if room.game_is_full() and not room.in_progress:
+            Server.play_game(room)
+
+        if room.in_progress:
+            self.send_in_progress_message(room)
+
         self.socket.send("JOIN:ACKSTATUS:0".encode())
 
+    def send_in_progress_message(self, room: Room) -> None:
+        # index of player whos turn it is
+        i = 1 - room.cross_turn
+        self.socket.send(
+                f"INPROGRESS:{room.players[i]}:{room.players[i - 1]}"
+                .encode()
+                )
 
 class Server:
-    clients = []
+    clients: list[Client] = []
 
     def __init__(self, config: Config) -> None:
         Server.config = config
@@ -159,6 +177,57 @@ class Server:
         print(
               f"Server started on ip {host}, port {port}, awaiting connection..."
               )
+
+    @staticmethod
+    def play_game(room: Room) -> None:
+        players: list[Client] = []
+
+        for client in Server.clients:
+            client.socket.send(
+                    f"BEGIN:{room.players[0]}:{room.players[1]}"
+                    .encode()
+                    )
+
+            if client.name in room.players:
+                players.append(client)
+
+        if players[0].name != room.players[0]:
+            players.reverse()
+        
+        game_over = False
+        while not game_over:
+            # index of player who is currently having their turn
+            i = 1 - room.cross_turn
+
+            # assumes will recieve PLACE message
+            data = players[i].socket.recv(8192).decode()
+
+            if not data:
+                msg = f"GAMEEND:{room.get_board_status()}:2:{players[1 - i]}"
+                map(lambda c : c.socket.send(msg.encode()), Server.clients)
+                return
+
+            x, y = map(lambda x : int(x), data.split(":")[1:])
+
+            # alternates turn in this method
+            room.make_move(x, y)
+            if (code := room.check_for_game_end()):
+                msg = f"GAMEEND:{room.get_board_status()}:{code - 1}"
+
+                # game won
+                if code == 1:
+                    msg += room.players[i]
+
+                map(lambda c : c.socket.send(msg.encode()), Server.clients)
+                return
+                
+
+            board_status: str = room.get_board_status()
+            for client in Server.clients:
+                client.socket.send(
+                        f"BOARDSTATUS:{board_status}"
+                        .encode()
+                        )
 
     def listen(self) -> None:
         """
@@ -181,7 +250,6 @@ class Server:
         """
         while True:
             msg = client.socket.recv(8192).decode()
-
             cmd = msg.split(":")[0]
             args = msg.split(":")[1:]
 
