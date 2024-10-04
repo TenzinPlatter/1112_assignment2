@@ -6,7 +6,7 @@ REGISTER    Register an account for yourself. Cannot register an account with
             into the account, that must be done seperately
 
 
-!!THE BELOW COMMANDS REQUIRE YOU TO BE LOGGED IN!!
+!!!THE BELOW COMMANDS REQUIRE YOU TO BE LOGGED IN!!!
 
 ROOMLIST    See a list of rooms available to join as either a player or viewer
 
