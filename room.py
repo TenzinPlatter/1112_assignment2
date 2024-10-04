@@ -1,21 +1,23 @@
 class Room:
     def __init__(self, name: str) -> None:
         self.name: str = name
-        self._players: list[str] = []
-        self._viewers: list[str] = []
+        self.players: list[str] = []
+        self.viewers: list[str] = []
+        self.in_progress: bool = False
+        self.cross_turn: bool = True
 
     def game_is_full(self) -> bool:
-        return len(self._players) >= 2
+        return len(self.players) >= 2
     
     def join(self, player_name: str, as_player: bool) -> None:
-        if as_player and len(self._players) >= 2:
+        if as_player and len(self.players) >= 2:
             raise Exception("Only try to join game as player if game is not full")
 
         if as_player:
-            self._players.append(player_name)
+            self.players.append(player_name)
 
         else:
-            self._viewers.append(player_name)
+            self.viewers.append(player_name)
 
 class Rooms:
     def __init__(self) -> None:
@@ -41,6 +43,13 @@ class Rooms:
             return [room.name for room in self._rooms if not room.game_is_full()]
 
         return [room.name for room in self._rooms]
+
+    def get_room(self, room_name: str) -> Room:
+        for room in self._rooms:
+            if room.name == room_name:
+                return room
+
+        raise Exception("Only call after checking room exists")
 
     def room_exists(self, room_name: str) -> bool:
         for room in self._rooms:
