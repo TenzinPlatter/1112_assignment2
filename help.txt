@@ -1,0 +1,15 @@
+LOGIN    Login to your account. Only one person can be logged into an
+         account at a time
+
+REGISTER    Register an account for yourself. Cannot register an account with
+            the same name as an already existing account. This will not log you
+            into the account, that must be done seperately
+
+
+!!THE BELOW COMMANDS REQUIRE YOU TO BE LOGGED IN!!
+
+ROOMLIST    See a list of rooms available to join as either a player or viewer
+
+CREATE    Create a room. This will not join the room, that must be done seperately
+
+JOIN    Join a room as either a player or viewer
