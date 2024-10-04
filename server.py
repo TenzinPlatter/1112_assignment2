@@ -179,7 +179,7 @@ class Server:
                 if client.check_for_badauth():
                     return
 
-            match msg:
+            match cmd:
                 case "LOGIN":
                     client.try_login(msg)
 
