@@ -4,11 +4,9 @@ import socket
 import os
 import bcrypt
 import json
-import struct
 from threading import Thread
 from config import Config
 import globals
-import room
 
 class Client:
     def __init__(self, sock: socket.socket) -> None:
@@ -34,20 +32,17 @@ class Client:
 
         return self.account.get_name();
 
-    def try_login(self, user_input: str) -> None:
+    def try_login(self, args: list[str]) -> None:
         """
         Scans data sent by connection until LOGIN message is sent with valid login
         details
         Pass in user_input as whole input without any cleaning
         """
-        data = user_input.split(":")
-
-        if len(data) != 3:
+        if len(args) != 2:
             self.socket.send("LOGIN:ACKSTATUS:3".encode())
             return
 
-        account = globals.logins.try_login(data[1], data[2])
-
+        account = globals.logins.try_login(args[0], args[1])
 
         if isinstance(account, int):
             self.socket.send(f"LOGIN:ACKSTATUS:{account}".encode())
@@ -57,11 +52,11 @@ class Client:
         # indicates successful login
         self.socket.send("LOGIN:ACKSTATUS:0".encode())
 
-    def try_register(self, data: str) -> None:
-        if len(data.split(":")) != 3:
+    def try_register(self, args: list[str]) -> None:
+        if len(args) != 2:
             self.socket.send("REGISTER:ACKSTATUS:2".encode())
 
-        username, password = data.split(":")[1:]
+        username, password = args
 
         if globals.logins.account_exists(username):
             self.socket.send("REGISTER:ACKSTATUS:1".encode())
@@ -70,10 +65,10 @@ class Client:
         Server.register_account(username, password)
         self.socket.send("REGISTER:ACKSTATUS:0".encode())
 
-    def roomlist(self, data: str) -> None:
+    def roomlist(self, args: list[str]) -> None:
         if (
-                len(data.split(":")) != 2
-                or (mode := data.split(":")[1]) not in ["PLAYER", "VIEWER"]
+                len(args) != 1
+                or (mode := args[0]) not in ["PLAYER", "VIEWER"]
                 ):
             self.socket.send("ROOMLIST:ACKSTATUS:1".encode())
             return
@@ -88,17 +83,19 @@ class Client:
             return True
         return False
     
-    def create_room(self, data: str):
+    def create_room(self, args: list[str]):
         #TODO: need someway to check if this is a ':' in the name of room vs
         # a separator
-        if len(data.split(":")) != 2:
+        if len(args) != 1:
             self.socket.send("CREATE:ACKSTATUS:4".encode())
             return
 
-        room_name = data.split(":")[1]
+        room_name = args[0]
 
-        if (
-                not room_name
+        # checks for that room name contains only alphanumeric, '-', ' ' or '_'
+        # characters and has length is no greater than 20
+        if not (
+                room_name
                 .replace("-", "")
                 .replace(" ", "")
                 .replace("_", "")
@@ -112,12 +109,41 @@ class Client:
             self.socket.send("CREATE:ACKSTATUS:2".encode())
             return
 
-        if globals.rooms.is_full():
+        if globals.rooms.server_is_full():
             self.socket.send("CREATE:ACKSTATUS:3".encode())
             return
         
         globals.rooms.create(room_name)
-        self.socket.send("CREATE:ACKSTATUS:4".encode())
+        self.socket.send("CREATE:ACKSTATUS:0".encode())
+
+    def join_room(self, args: list[str]) -> None:
+        if len(args) != 2:
+            self.socket.send("JOIN:ACKSTATUS:3".encode())
+            return
+
+        room_name, mode = args
+
+        if mode not in ["PLAYER", "VIEWER"]:
+            self.socket.send("JOIN:ACKSTATUS:3".encode())
+            return
+
+        if not globals.rooms.room_exists(room_name):
+            self.socket.send("JOIN:ACKSTATUS:1".encode())
+            return
+
+        if globals.rooms.game_is_full(room_name):
+            self.socket.send("JOIN:ACKSTATUS:2".encode())
+            return
+
+        if self.account is None:
+            raise Exception(
+                    "How has this happened - should've been caught by badauth"
+                    )
+
+        globals.rooms.join(room_name, self.account.name, mode == "PLAYER")
+
+        self.socket.send("JOIN:ACKSTATUS:0".encode())
+
 
 class Server:
     clients = []
@@ -126,9 +152,6 @@ class Server:
         Server.config = config
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        # maybe remove for submission, not sure if struct is allowed
-        self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("ii", 1, 0))
-
         host, port = "127.0.0.1", config.get_port()
         self.socket.bind((host, port))
         self.socket.listen()
@@ -152,19 +175,6 @@ class Server:
             # starts client in new thread
             Thread(target = self.handle_new_client, args = (client,)).start()
 
-    def broadcast(self, client_names: list[str], msg: str, all_but: bool = True):
-        """
-        Broadcasts a message to all other members in server If all_but is set to False, the message will be sent to the clients passed in, else sent to all clients other than the ones passed in
-        """
-        for client in Server.clients:
-            if all_but and client.get_name() not in client_names:
-                client.socket.send(msg.encode())
-                continue
-
-            if not all_but and client.get_name() in client_names:
-                client.socket.send(msg.encode())
-                continue
-
     def handle_new_client(self, client: Client):
         """
         Function to handle client on a thread
@@ -173,24 +183,28 @@ class Server:
             msg = client.socket.recv(8192).decode()
 
             cmd = msg.split(":")[0]
+            args = msg.split(":")[1:]
 
             # commands requiring authorisation
-            if cmd in ["ROOMLIST", "CREATE"]:
+            if cmd in ["ROOMLIST", "CREATE", "JOIN"]:
                 if client.check_for_badauth():
                     return
 
             match cmd:
                 case "LOGIN":
-                    client.try_login(msg)
+                    client.try_login(args)
 
                 case "REGISTER":
-                    client.try_register(msg)
+                    client.try_register(args)
 
                 case "ROOMLIST":
-                    client.roomlist(msg)
+                    client.roomlist(args)
 
                 case "CREATE":
-                    client.create_room(msg)
+                    client.create_room(args)
+
+                case "JOIN":
+                    client.join_room(args)
 
                 case "QUIT":
                     self.close()

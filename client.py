@@ -33,13 +33,20 @@ class Client:
             case 2:
                 print(f"Error: Wrong password for user {username}")
 
-    def received_badauth(self) -> None:
-        print("Error: You must be logged in to perform this action")
+    def check_for_badauth(self, response: str) -> bool:
+        if response == "BADAUTH":
+            print("Error: You must be logged in to perform this action")
+            return True
+
+        return False
 
     def roomlist(self) -> None:
-        mode = input(
-                "Would you like to join as a player or viewer? [PLAYER/VIEWER] "
-                )
+        mode = input("Would you like to join as a player or viewer? [p/v] ")
+
+        if mode == "p":
+            mode = "PLAYER"
+        elif mode == "v":
+            mode = "VIEWER"
 
         self.socket.send(f"ROOMLIST:{mode}".encode())
 
@@ -49,20 +56,18 @@ class Client:
             sys.stderr.write("ClientError: Please input a valid mode")
             return
 
-        if response == "BADAUTH":
-            self.received_badauth()
+        if self.check_for_badauth(response):
             return
         
         roomlist = response.split(":")[-1]
 
-        print(f"Room available to join as {mode}: {roomlist}")
+        print(f"Rooms available to join as {mode}: {roomlist}")
 
     def create_room(self) -> None:
         room_name = input("Please enter a name for your room: ")
         self.socket.send(f"CREATE:{room_name}".encode())
 
         response = self.socket.recv(8192).decode()
-        
         if not response[:-1] == "CREATE:ACKSTATUS:":
             raise Exception(f"Invalid response: {response}")
 
@@ -77,30 +82,69 @@ class Client:
                 print(f"Error: Room {room_name} already exists")
             case 3:
                 print("Error: Server already contains a maxumum of 256 rooms")
+            case _:
+                raise Exception(f"Invalid return code {code}")
+
+    def join_room(self) -> None:
+        room_name = input("What room would you like to join? ")
+        mode = input("Would you like to join as a player or viewer? [p/v] ")
+
+        if mode == "p":
+            mode = "PLAYER"
+        elif mode == "v":
+            mode = "VIEWER"
+
+        self.socket.send(f"JOIN:{room_name}:{mode}".encode())
+
+        response = self.socket.recv(8192).decode()
+        
+        if self.check_for_badauth(response):
+            return
+
+        if response[:-1] != "JOIN:ACKSTATUS:":
+            raise Exception(f"Invalid response: {response}")
+
+        code = int(response[-1])
+
+        match code:
+            case 0:
+                print(f"Successfully joined room {room_name} as a {mode.lower()}")
+            case 1:
+                print(f"Error: No room named {room_name}")
+            case 2:
+                print(f"Error: The room {room_name} already has 2 players")
 
     def talk_to_server(self) -> None:
+        print("Enter 'help' to see a list of commands")
         while True:
-            data = input("> ")
-            match data:
-                case "LOGIN":
-                    self.login()
-
-                case "REGISTER":
-                    self.register()
-
-                case "ROOMLIST":
-                    self.roomlist()
-
-                case "CREATE":
-                    self.create_room()
-
-                case "JOIN":
-                    self.join_room()
-
+            command = input("> ").lower()
+            match command:
                 # delete for submission
                 case "exit":
                     self.socket.send("QUIT".encode())
                     os._exit(0)
+
+                case "help":
+                    self.show_help()
+
+                case "login":
+                    self.login()
+
+                case "register":
+                    self.register()
+
+                case "roomlist":
+                    self.roomlist()
+
+                case "create":
+                    self.create_room()
+
+                case "join":
+                    self.join_room()
+
+    def show_help(self) -> None:
+        with open("help.txt", "r") as f:
+            print(f.read())
 
     def register(self) -> None:
         info = self.get_info()

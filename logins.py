@@ -2,12 +2,12 @@ import bcrypt
 
 class Login:
     def __init__(self, name: str, password: str) -> None:
-        self._name = name
+        self.name = name
         self._password = password
         self._logged_in = False
 
     def __str__(self) -> str:
-        return f"Name: '{self._name}', Password: '{self._password}'"
+        return f"Name: '{self.name}', Password: '{self._password}'"
     
     def is_valid(self, name: str, password: str) -> int:
         """
@@ -15,7 +15,7 @@ class Login:
         logged in
         """
         if (
-                self._name == name
+                self.name == name
                 and bcrypt.checkpw(password.encode(), self._password.encode())
                 ):
             if self._logged_in:
@@ -27,9 +27,6 @@ class Login:
 
     def logout(self) -> None:
         self._logged_in = False
-
-    def get_name(self) -> str:
-        return self._name
 
 class Logins:
     def __init__(self) -> None:
