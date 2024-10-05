@@ -30,7 +30,7 @@ class Login:
 
 class Logins:
     def __init__(self) -> None:
-        self.accounts = []
+        self.accounts: list[Login] = []
 
     def __str__(self) -> str:
         res = ""
@@ -49,7 +49,7 @@ class Logins:
         returns wether or not a username has an associated account
         """
         for account in self.accounts:
-            if account.get_name() == name:
+            if account.name == name:
                 return True
 
         return False
@@ -64,6 +64,7 @@ class Logins:
         for account in self.accounts:
             code = account.is_valid(name, password)
             if code == 1:
+                account._logged_in = True
                 return account
 
             if code == -1:

@@ -1,8 +1,9 @@
 import sys
 import os
 import socket
-import globals
 import game
+from threading import Thread
+from queue import Queue
 
 class Client:
     def __init__(self, host: str, port: int) -> None:
@@ -10,11 +11,52 @@ class Client:
         self.socket.connect((host, port))
         self.in_game = False
         self.username = None
+        self.responses = Queue()
 
-        self.talk_to_server()
+        Thread(target = self.talk_to_server).start()
+        self.listen_to_server()
+
+    def listen_to_server(self) -> None:
+        while True:
+            response = self.socket.recv(8192).decode()
+            self.responses.put(response)
+
+    def talk_to_server(self) -> None:
+        print("Enter 'help' to see a list of commands")
+        while True:
+            if self.in_game:
+                continue
+
+            command = input("> ").lower().strip()
+            match command:
+                case "clear":
+                    os.system("clear")
+                # delete for submission
+                case "exit":
+                    self.socket.send("QUIT".encode())
+                    os._exit(0)
+
+                case "help":
+                    self.show_help()
+
+                case "login":
+                    self.login()
+
+                case "register":
+                    self.register()
+
+                case "roomlist":
+                    self.roomlist()
+
+                case "create":
+                    self.create_room()
+
+                case "join":
+                    self.join_room()
 
     def login(self) -> None:
         info = self.get_info()
+
         if not info:
             return
 
@@ -22,7 +64,7 @@ class Client:
 
         self.socket.send(f"LOGIN:{username}:{password}".encode())
 
-        received = self.socket.recv(8192).decode()
+        received = self.responses.get()
 
         code = int(received.split(":")[2])
 
@@ -54,7 +96,7 @@ class Client:
 
         self.socket.send(f"ROOMLIST:{mode}".encode())
 
-        response = self.socket.recv(8192).decode()
+        response = self.responses.get()
 
         if response == "ROOMLIST:ACKSTATUS:1":
             sys.stderr.write("ClientError: Please input a valid mode")
@@ -65,13 +107,17 @@ class Client:
         
         roomlist = response.split(":")[-1]
 
-        print(f"Rooms available to join as {mode}: {roomlist}")
+        print(f"Rooms available to join as {mode.lower()}: {roomlist}")
 
     def create_room(self) -> None:
         room_name = input("Please enter a name for your room: ")
         self.socket.send(f"CREATE:{room_name}".encode())
 
-        response = self.socket.recv(8192).decode()
+        response = self.responses.get()
+
+        if self.check_for_badauth(response):
+            return
+
         if not response[:-1] == "CREATE:ACKSTATUS:":
             raise Exception(f"Invalid response: {response}")
 
@@ -100,7 +146,7 @@ class Client:
 
         self.socket.send(f"JOIN:{room_name}:{mode}".encode())
 
-        response = self.socket.recv(8192).decode()
+        response = self.responses.get()
         
         if self.check_for_badauth(response):
             return
@@ -118,17 +164,23 @@ class Client:
             case 2:
                 print(f"Error: The room {room_name} already has 2 players")
 
-        if code != 0:
+        response = self.responses.get()
+        print(response)
+        game_started = int(
+                response
+                .split(":")[1]
+                )
+        # GAME:0 -> not started
+        # GAME:1 -> started
+
+        if not game_started:
             return
 
-        # game has started
-        if globals.rooms.get_room(room_name).game_is_full():
-            self.handle_game()
-
+        self.handle_game()
 
     def handle_game(self) -> None:
         self.in_game = True
-        data = self.socket.recv(8192).decode()
+        data = self.responses.get()
         
         if data.startswith("BEGIN:"):
             self.handle_game_start(data)
@@ -183,7 +235,7 @@ class Client:
 
                 self.socket.send(f"PLACE:{x}:{y}".encode())
 
-            data = self.socket.recv(8192).decode()
+            data = self.responses.get()
 
             if data.startswith("GAMEEND:"):
                 self.handle_game_end(data.split(":")[1:], is_player)
@@ -200,7 +252,7 @@ class Client:
         print(msg)
         board_status = "000000000"
         while True:
-            data = self.socket.recv(8192).decode()
+            data = self.responses.get()
 
             if data.startswith("GAMEEND:"):
                 self.handle_game_end(data.split(":")[1:], False)
@@ -229,36 +281,6 @@ class Client:
             winner = args[-1]
             print(f"{winner} won due to the opposing player forfeiting")
 
-    def talk_to_server(self) -> None:
-        print("Enter 'help' to see a list of commands")
-        while True:
-            if self.in_game:
-                continue
-
-            command = input("> ").lower()
-            match command:
-                # delete for submission
-                case "exit":
-                    self.socket.send("QUIT".encode())
-                    os._exit(0)
-
-                case "help":
-                    self.show_help()
-
-                case "login":
-                    self.login()
-
-                case "register":
-                    self.register()
-
-                case "roomlist":
-                    self.roomlist()
-
-                case "create":
-                    self.create_room()
-
-                case "join":
-                    self.join_room()
 
     def show_help(self) -> None:
         with open("help.txt", "r") as f:
@@ -274,7 +296,7 @@ class Client:
 
         self.socket.send(f"REGISTER:{username}:{password}".encode())
 
-        response = self.socket.recv(8192).decode()
+        response = self.responses.get()
 
         if response[:-1] != "REGISTER:ACKSTATUS:":
             raise Exception("Recieved invalid response for register: " + response)

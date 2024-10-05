@@ -1,7 +1,7 @@
 import json
 import os
 import sys
-from globals import logins
+from server import Server
 
 def is_valid_user_json(user: dict) -> bool:
     return (
@@ -38,7 +38,7 @@ class Config:
 
                 for user in users:
                     is_valid_user_json(user)
-                    logins.add_account(user["username"], user["password"])
+                    Server.logins.add_account(user["username"], user["password"])
 
         except FileNotFoundError:
             sys.stderr.write(
@@ -86,4 +86,3 @@ class Config:
                     f"Error: {config_path} missing key(s): {', '.join(missing_keys)}\n"
                     )
             os._exit(1)
-

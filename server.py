@@ -5,9 +5,8 @@ import os
 import bcrypt
 import json
 from threading import Thread
-from config import Config
-from room import Room
-import globals
+from room import Room, Rooms
+from logins import Logins
 
 class Client:
     def __init__(self, sock: socket.socket) -> None:
@@ -44,7 +43,7 @@ class Client:
             self.socket.send("LOGIN:ACKSTATUS:3".encode())
             return
 
-        account = globals.logins.try_login(args[0], args[1])
+        account = Server.logins.try_login(args[0], args[1])
 
         if isinstance(account, int):
             self.socket.send(f"LOGIN:ACKSTATUS:{account}".encode())
@@ -60,7 +59,7 @@ class Client:
 
         username, password = args
 
-        if globals.logins.account_exists(username):
+        if Server.logins.account_exists(username):
             self.socket.send("REGISTER:ACKSTATUS:1".encode())
             return
 
@@ -75,11 +74,15 @@ class Client:
             self.socket.send("ROOMLIST:ACKSTATUS:1".encode())
             return
         
-        roomlist = ",".join(globals.rooms.get_room_names(mode == "PLAYER"))        
+        roomlist = ",".join(Server.rooms.get_room_names(mode == "PLAYER"))        
 
         self.socket.send(f"ROOMLIST:ACKSTATUS:0:{roomlist}".encode())
 
-    def check_for_badauth(self) -> bool:
+    def handle_for_badauth(self) -> bool:
+        """
+        Returns true if client is unauthorized, else false. Handles sending
+        BADAUTH message
+        """
         if not self.has_auth():
             self.socket.send("BADAUTH".encode())
             return True
@@ -107,15 +110,15 @@ class Client:
             self.socket.send("CREATE:ACKSTATUS:1".encode())
             return
         
-        if globals.rooms.room_exists(room_name):
+        if Server.rooms.room_exists(room_name):
             self.socket.send("CREATE:ACKSTATUS:2".encode())
             return
 
-        if globals.rooms.server_is_full():
+        if Server.rooms.server_is_full():
             self.socket.send("CREATE:ACKSTATUS:3".encode())
             return
         
-        globals.rooms.create(room_name)
+        Server.rooms.create(room_name)
         self.socket.send("CREATE:ACKSTATUS:0".encode())
 
     def join_room(self, args: list[str]) -> None:
@@ -129,11 +132,11 @@ class Client:
             self.socket.send("JOIN:ACKSTATUS:3".encode())
             return
 
-        if not globals.rooms.room_exists(room_name):
+        if not Server.rooms.room_exists(room_name):
             self.socket.send("JOIN:ACKSTATUS:1".encode())
             return
 
-        if mode == "PLAYER" and globals.rooms.game_is_full(room_name):
+        if mode == "PLAYER" and Server.rooms.game_is_full(room_name):
             self.socket.send("JOIN:ACKSTATUS:2".encode())
             return
 
@@ -143,17 +146,22 @@ class Client:
                     "How has this happened - should've been caught by badauth"
                     )
 
-        globals.rooms.join(room_name, self.account.name, mode == "PLAYER")
+        Server.rooms.join(room_name, self.account.name, mode == "PLAYER")
+        self.socket.send("JOIN:ACKSTATUS:0".encode())
 
-        room = globals.rooms.get_room(room_name)
+        room = Server.rooms.get_room(room_name)
 
         if room.game_is_full() and not room.in_progress:
+            self.socket.send("GAME:1".encode())
             Server.play_game(room)
+            return
 
         if room.in_progress:
+            self.socket.send("GAME:2".encode())
             self.send_in_progress_message(room)
+            return
 
-        self.socket.send("JOIN:ACKSTATUS:0".encode())
+        self.socket.send("GAME:0".encode())
 
     def send_in_progress_message(self, room: Room) -> None:
         # index of player whos turn it is
@@ -165,13 +173,18 @@ class Client:
 
 class Server:
     clients: list[Client] = []
+    rooms = Rooms()
+    logins = Logins()
 
-    def __init__(self, config: Config) -> None:
+    def __init__(self, config) -> None:
         Server.config = config
+
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+
         host, port = "127.0.0.1", config.get_port()
         self.socket.bind((host, port))
+
         self.socket.listen()
 
         print(
@@ -255,8 +268,8 @@ class Server:
 
             # commands requiring authorisation
             if cmd in ["ROOMLIST", "CREATE", "JOIN"]:
-                if client.check_for_badauth():
-                    return
+                if client.handle_for_badauth():
+                    continue
 
             match cmd:
                 case "LOGIN":
@@ -290,7 +303,7 @@ class Server:
             accounts = json.load(f)
 
         accounts.append(new_account)
-        globals.logins.add_account(name, hash.decode())
+        Server.logins.add_account(name, hash.decode())
 
         with open(Server.config.get_userdatabase_path(), "w") as f:
             json.dump(accounts, f, indent = 4)
@@ -304,6 +317,92 @@ class Server:
 
         self.socket.close()
         os._exit(0)
+
+
+class Config:
+    @staticmethod
+    def is_valid_user_json(user: dict) -> bool:
+        return (
+                user.keys() == ["username", "password"]
+                or user.keys() == ["password", "username"]
+                )
+
+    def __init__(self, config_path: str) -> None:
+        self.parse_config(os.path.expanduser(config_path))
+        self.parse_users()
+
+        port = self.get_port()
+
+        if not isinstance(port, int) or not (1024 <= port <= 65535):
+            sys.stderr.write(
+                    "Invalid port, expecting an integer in range 1024-65535\n"
+                             )
+            os._exit(0)
+
+    def get_userdatabase_path(self) -> str:
+        return os.path.expanduser(self.config["userDatabase"])
+
+    def get_port(self) -> int:
+        return int(self.config["port"])
+
+    def parse_users(self) -> None:
+        user_config = os.path.expanduser(self.config["userDatabase"])
+        try:
+            with open(user_config, 'r') as f:
+                users = json.load(f)
+                if not isinstance(users, list):
+                    raise TypeError
+
+                for user in users:
+                    Config.is_valid_user_json(user)
+                    Server.logins.add_account(user["username"], user["password"])
+
+        except FileNotFoundError:
+            sys.stderr.write(
+                f"Error: {user_config} doesn't exist.\n"
+                )
+            os._exit(1)
+
+        except json.JSONDecodeError:
+            sys.stderr.write(
+                    f"Error: {user_config} is not in a valid JSON format.\n"
+                    )
+            os._exit(1)
+
+        # json is not a list
+        except TypeError:
+            sys.stderr.write(
+                    f"Error: {user_config} is not a JSON array.\n"
+                    )
+            os._exit(1)
+
+    def parse_config(self, config_path: str) -> None:
+        try:
+            with open(config_path, 'r') as f:
+                self.config = json.load(f)
+
+        except FileNotFoundError:
+            sys.stderr.write("Error: {config_path} doesn't exist.\n")
+            os._exit(1)
+
+        except json.JSONDecodeError:
+            sys.stderr.write(
+                    f"Error: {config_path} is not in a valid JSON format.\n"
+                    )
+            os._exit(1)
+
+        expected_keys = ["port", "userDatabase"]
+        missing_keys = []
+
+        for key in expected_keys:
+            if key not in self.config:
+                missing_keys.append(key)
+
+        if missing_keys:
+            sys.stderr.write(
+                    f"Error: {config_path} missing key(s): {', '.join(missing_keys)}\n"
+                    )
+            os._exit(1)
 
 def main(args: list[str]) -> None:
     if len(args) != 1:
