@@ -18,8 +18,20 @@ class Client:
 
     def listen_to_server(self) -> None:
         while True:
-            response = self.socket.recv(8192).decode()
-            self.responses.put(response)
+            responses = self.socket.recv(8192).decode().split("\n")
+            print(responses)
+
+            for response in responses:
+                if response.startswith("BEGIN"):
+                    self.in_game = True
+                    Thread(
+                            target = self.handle_game_start,
+                            args = (response, )
+                            ).start()
+                    continue
+                
+                if response.strip():
+                    self.responses.put(response)
 
     def talk_to_server(self) -> None:
         print("Enter 'help' to see a list of commands")
@@ -143,6 +155,9 @@ class Client:
             mode = "PLAYER"
         elif mode == "v":
             mode = "VIEWER"
+        else:
+            sys.stderr.write("Invalid room mode, please use 'p' or 'v'.\n")
+            return
 
         self.socket.send(f"JOIN:{room_name}:{mode}".encode())
 
@@ -176,21 +191,6 @@ class Client:
         if not game_started:
             return
 
-        self.handle_game()
-
-    def handle_game(self) -> None:
-        self.in_game = True
-        data = self.responses.get()
-        
-        if data.startswith("BEGIN:"):
-            self.handle_game_start(data)
-
-        elif data.startswith("INPROGRESS"):
-            self.handle_game_in_progress(data)
-
-        else:
-            raise Exception(f"Invalid response: {data}")
-
     def handle_game_start(self, data: str) -> None:
         crosses, noughts = data.split(":")[1:]
 
@@ -199,6 +199,7 @@ class Client:
 
         board_status = "000000000"
         while True:
+            game.print_board_from_status(board_status)
             move = None
 
             if is_player:
@@ -206,13 +207,13 @@ class Client:
                     if crosses_turn:
                         move = input("Please enter your move: [x y] ")
                     else:
-                        print("Please wait for your opponent to make their first move.")
+                        print("Please wait for your opponent to make their move.")
 
                 elif self.username == noughts:
                     if not crosses_turn:
                         move = input("Please enter your move: [x y] ")
                     else:
-                        print("Please wait for your opponent to make their first move.")
+                        print("Please wait for your opponent to make their move.")
             else:
                 msg = f"Match between {crosses} and {noughts} will commence"
                 msg += f", it is currently {crosses}'s turn."
@@ -226,13 +227,23 @@ class Client:
                     pos = 3 * y + x
                     return 0 <= x <= 2 and 0 <= y <= 2 and board_status[pos] == "0"
 
-                x, y = map(lambda x : int(x), move.split())
+                try:
+                    x, y = map(lambda x : int(x), move.split())
+                except:
+                    # to trigger while loop on invalid input
+                    x, y = -1, -1
+
                 while not valid_move(x, y):
                     print("Sorry, that was an invalid move, please try again")
                     print("0 <= x, y <= 2")
                     move = input("Enter a valid coordinate in the form [x y] ")
-                    x, y = map(lambda x : int(x), move.split())
 
+                    try:
+                        x, y = map(lambda x : int(x), move.split())
+                    except:
+                        x, y = -1, -1
+
+                print("sending place")
                 self.socket.send(f"PLACE:{x}:{y}".encode())
 
             data = self.responses.get()
@@ -242,7 +253,6 @@ class Client:
                 return
 
             board_status = data.split(":")[1]
-            game.print_board_from_status(board_status)
             crosses_turn = not crosses_turn
 
     def handle_game_in_progress(self, data: str) -> None:

@@ -24,6 +24,8 @@ class Room:
 
     def make_move(self, x: int, y: int) -> None:
         self._board[x][y] = game.CROSS if self.cross_turn else game.NOUGHT
+
+    def alternate_turn(self) -> None:
         self.cross_turn = not self.cross_turn
     
     def get_board_status(self) -> str:
@@ -50,6 +52,7 @@ class Room:
         use code - 1 for sending message to client
         """
         player = game.CROSS if self.cross_turn else game.NOUGHT
+
         if game.player_wins(player, self._board):
             return 1
 

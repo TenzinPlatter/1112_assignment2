@@ -12,6 +12,14 @@ class Client:
     def __init__(self, sock: socket.socket) -> None:
         self.socket = sock
         self.account = None
+        self.playing_game = False
+
+    def send_message(self, msg: bytes):
+        self.socket.send(msg + "\n".encode())
+        res = f"{msg.decode()}"
+        if self.account:
+            res += f" to {self.account.name}"
+        print(res)
 
     @property
     def name(self) -> str | None:
@@ -27,9 +35,6 @@ class Client:
         if self.account:
             self.account.logout()
 
-        self.account = None
-        self.socket.close()
-
     def has_auth(self) -> bool:
         return self.account is not None
 
@@ -40,43 +45,43 @@ class Client:
         Pass in user_input as whole input without any cleaning
         """
         if len(args) != 2:
-            self.socket.send("LOGIN:ACKSTATUS:3".encode())
+            self.send_message("LOGIN:ACKSTATUS:3".encode())
             return
 
         account = Server.logins.try_login(args[0], args[1])
 
         if isinstance(account, int):
-            self.socket.send(f"LOGIN:ACKSTATUS:{account}".encode())
+            self.send_message(f"LOGIN:ACKSTATUS:{account}".encode())
             return
 
         self.account = account
         # indicates successful login
-        self.socket.send("LOGIN:ACKSTATUS:0".encode())
+        self.send_message("LOGIN:ACKSTATUS:0".encode())
 
     def try_register(self, args: list[str]) -> None:
         if len(args) != 2:
-            self.socket.send("REGISTER:ACKSTATUS:2".encode())
+            self.send_message("REGISTER:ACKSTATUS:2".encode())
 
         username, password = args
 
         if Server.logins.account_exists(username):
-            self.socket.send("REGISTER:ACKSTATUS:1".encode())
+            self.send_message("REGISTER:ACKSTATUS:1".encode())
             return
 
         Server.register_account(username, password)
-        self.socket.send("REGISTER:ACKSTATUS:0".encode())
+        self.send_message("REGISTER:ACKSTATUS:0".encode())
 
     def roomlist(self, args: list[str]) -> None:
         if (
                 len(args) != 1
                 or (mode := args[0]) not in ["PLAYER", "VIEWER"]
                 ):
-            self.socket.send("ROOMLIST:ACKSTATUS:1".encode())
+            self.send_message("ROOMLIST:ACKSTATUS:1".encode())
             return
         
         roomlist = ",".join(Server.rooms.get_room_names(mode == "PLAYER"))        
 
-        self.socket.send(f"ROOMLIST:ACKSTATUS:0:{roomlist}".encode())
+        self.send_message(f"ROOMLIST:ACKSTATUS:0:{roomlist}".encode())
 
     def handle_for_badauth(self) -> bool:
         """
@@ -84,7 +89,7 @@ class Client:
         BADAUTH message
         """
         if not self.has_auth():
-            self.socket.send("BADAUTH".encode())
+            self.send_message("BADAUTH".encode())
             return True
         return False
     
@@ -92,7 +97,7 @@ class Client:
         #TODO: need someway to check if this is a ':' in the name of room vs
         # a separator
         if len(args) != 1:
-            self.socket.send("CREATE:ACKSTATUS:4".encode())
+            self.send_message("CREATE:ACKSTATUS:4".encode())
             return
 
         room_name = args[0]
@@ -107,37 +112,37 @@ class Client:
                 .isalnum()
                 or len(room_name) > 20
                 ):
-            self.socket.send("CREATE:ACKSTATUS:1".encode())
+            self.send_message("CREATE:ACKSTATUS:1".encode())
             return
         
         if Server.rooms.room_exists(room_name):
-            self.socket.send("CREATE:ACKSTATUS:2".encode())
+            self.send_message("CREATE:ACKSTATUS:2".encode())
             return
 
         if Server.rooms.server_is_full():
-            self.socket.send("CREATE:ACKSTATUS:3".encode())
+            self.send_message("CREATE:ACKSTATUS:3".encode())
             return
         
         Server.rooms.create(room_name)
-        self.socket.send("CREATE:ACKSTATUS:0".encode())
+        self.send_message("CREATE:ACKSTATUS:0".encode())
 
     def join_room(self, args: list[str]) -> None:
         if len(args) != 2:
-            self.socket.send("JOIN:ACKSTATUS:3".encode())
+            self.send_message("JOIN:ACKSTATUS:3".encode())
             return
 
         room_name, mode = args
 
         if mode not in ["PLAYER", "VIEWER"]:
-            self.socket.send("JOIN:ACKSTATUS:3".encode())
+            self.send_message("JOIN:ACKSTATUS:3".encode())
             return
 
         if not Server.rooms.room_exists(room_name):
-            self.socket.send("JOIN:ACKSTATUS:1".encode())
+            self.send_message("JOIN:ACKSTATUS:1".encode())
             return
 
         if mode == "PLAYER" and Server.rooms.game_is_full(room_name):
-            self.socket.send("JOIN:ACKSTATUS:2".encode())
+            self.send_message("JOIN:ACKSTATUS:2".encode())
             return
 
         # mostly so lsp stops yelling
@@ -147,26 +152,26 @@ class Client:
                     )
 
         Server.rooms.join(room_name, self.account.name, mode == "PLAYER")
-        self.socket.send("JOIN:ACKSTATUS:0".encode())
+        self.send_message("JOIN:ACKSTATUS:0".encode())
 
         room = Server.rooms.get_room(room_name)
 
         if room.game_is_full() and not room.in_progress:
-            self.socket.send("GAME:1".encode())
+            self.send_message("GAME:1".encode())
             Server.play_game(room)
             return
 
         if room.in_progress:
-            self.socket.send("GAME:2".encode())
+            self.send_message("GAME:2".encode())
             self.send_in_progress_message(room)
             return
 
-        self.socket.send("GAME:0".encode())
+        self.send_message("GAME:0".encode())
 
     def send_in_progress_message(self, room: Room) -> None:
         # index of player whos turn it is
         i = 1 - room.cross_turn
-        self.socket.send(
+        self.send_message(
                 f"INPROGRESS:{room.players[i]}:{room.players[i - 1]}"
                 .encode()
                 )
@@ -193,22 +198,34 @@ class Server:
 
     @staticmethod
     def play_game(room: Room) -> None:
+        #TODO: create end game func
+        # - Set all players/spectators to not in game
+
+        clients: list[Client] = []
         players: list[Client] = []
 
         for client in Server.clients:
-            client.socket.send(
+            # client not in room
+            if (
+                    client.name not in room.players
+                    and client.name not in room.viewers
+                    ):
+                continue
+
+            if client.name in room.players:
+                players.append(client)
+                client.playing_game = True
+
+            clients.append(client)
+            client.send_message(
                     f"BEGIN:{room.players[0]}:{room.players[1]}"
                     .encode()
                     )
 
-            if client.name in room.players:
-                players.append(client)
-
         if players[0].name != room.players[0]:
             players.reverse()
         
-        game_over = False
-        while not game_over:
+        while True:
             # index of player who is currently having their turn
             i = 1 - room.cross_turn
 
@@ -217,13 +234,13 @@ class Server:
 
             if not data:
                 msg = f"GAMEEND:{room.get_board_status()}:2:{players[1 - i]}"
-                map(lambda c : c.socket.send(msg.encode()), Server.clients)
+                map(lambda c : c.send_message(msg.encode()), clients)
                 return
 
             x, y = map(lambda x : int(x), data.split(":")[1:])
 
-            # alternates turn in this method
             room.make_move(x, y)
+
             if (code := room.check_for_game_end()):
                 msg = f"GAMEEND:{room.get_board_status()}:{code - 1}"
 
@@ -231,13 +248,15 @@ class Server:
                 if code == 1:
                     msg += room.players[i]
 
-                map(lambda c : c.socket.send(msg.encode()), Server.clients)
+                map(lambda c : c.send_message(msg.encode()), clients)
                 return
-                
 
+            print(code) 
+
+            room.alternate_turn()
             board_status: str = room.get_board_status()
-            for client in Server.clients:
-                client.socket.send(
+            for client in clients:
+                client.send_message(
                         f"BOARDSTATUS:{board_status}"
                         .encode()
                         )
@@ -262,7 +281,16 @@ class Server:
         Function to handle client on a thread
         """
         while True:
+            if client.playing_game:
+                continue
+
             msg = client.socket.recv(8192).decode()
+            print("msg: " + msg)
+            
+            if not msg:
+                client.close()
+                return
+
             cmd = msg.split(":")[0]
             args = msg.split(":")[1:]
 
@@ -317,7 +345,6 @@ class Server:
 
         self.socket.close()
         os._exit(0)
-
 
 class Config:
     @staticmethod
